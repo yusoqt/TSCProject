@@ -1,0 +1,191 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thai Text Assistant</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        /* Use Sarabun font for better Thai text rendering */
+        body {
+            font-family: 'Sarabun', sans-serif;
+            scroll-behavior: smooth;
+        }
+        /* Style for highlighted errors */
+        .highlight-error {
+            background-color: #fecaca; /* red-200 */
+            text-decoration: underline;
+            text-decoration-color: #ef4444; /* red-500 */
+            text-decoration-thickness: 2px;
+            border-radius: 4px;
+            cursor: pointer;
+            position: relative;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center py-12">
+
+    <div class="w-full max-w-2xl mx-auto bg-white rounded-2xl shadow-xl p-8 space-y-8">
+        
+        <header class="text-center">
+            <h1 class="text-4xl font-bold text-gray-800">Thai Text Assistant ✨</h1>
+            <p class="text-gray-500 mt-2">เครื่องมือช่วยจัดการข้อความภาษาไทยด้วย Gemini AI</p>
+        </header>
+
+        <!-- Main Form -->
+        <div class="space-y-4">
+            <div>
+                <label for="text" class="sr-only">Text to check</label>
+                <textarea id="text" name="text" rows="10" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-shadow" placeholder="ป้อนข้อความภาษาไทยที่นี่... เช่น ฉันรักประเทสไทย"></textarea>
+            </div>
+            <!-- Action Buttons -->
+            <div>
+                <button type="button" id="checkBtn" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300 transition-all duration-300 ease-in-out flex items-center justify-center">
+                    <svg id="checkSpinner" class="animate-spin -ml-1 mr-3 h-5 w-5 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    <span id="checkButtonText">ตรวจคำผิด</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Result Area -->
+        <div id="resultContainer" class="pt-6 border-t border-gray-200 hidden">
+             <h2 class="text-xl font-bold text-gray-700 mb-4">ผลลัพธ์:</h2>
+             <div id="resultText" class="text-lg leading-relaxed whitespace-pre-wrap p-4 bg-gray-50 rounded-lg border border-gray-200"></div>
+             <p id="errorCount" class="text-sm text-gray-500 mt-2"></p>
+        </div>
+
+        <!-- Error Message Display -->
+        <div id="errorAlert" class="mt-6 p-4 bg-red-100 text-red-700 border border-red-300 rounded-lg hidden"></div>
+
+    </div>
+
+    <script>
+        // --- Element Selections ---
+        const textInput = document.getElementById('text');
+        const checkBtn = document.getElementById('checkBtn');
+        
+        const resultContainer = document.getElementById('resultContainer');
+        const resultText = document.getElementById('resultText');
+        const errorCount = document.getElementById('errorCount');
+        const errorAlert = document.getElementById('errorAlert');
+
+        // --- Utility Functions ---
+        function showSpinner(buttonId, show) {
+            const spinner = document.getElementById(buttonId + 'Spinner');
+            const button = document.getElementById(buttonId + 'Btn');
+            if (show) {
+                spinner.classList.remove('hidden');
+                button.disabled = true;
+            } else {
+                spinner.classList.add('hidden');
+                button.disabled = false;
+            }
+        }
+
+        function showAlert(message) {
+            errorAlert.textContent = message;
+            errorAlert.classList.remove('hidden');
+        }
+
+        function hideAlert() {
+            errorAlert.classList.add('hidden');
+        }
+        
+        function replaceTextInTextarea(originalWord, newWord) {
+            textInput.value = textInput.value.replace(originalWord, newWord);
+        }
+
+        // --- Event Listeners ---
+        checkBtn.addEventListener('click', handleSpellCheck);
+
+        // Event delegation for clicking on highlighted errors
+        resultText.addEventListener('click', function(event) {
+            const target = event.target;
+            if (target.classList.contains('highlight-error')) {
+                const suggestion = target.dataset.suggestion;
+                const originalWord = target.textContent;
+                if (suggestion && confirm(`แก้ไขคำว่า "${originalWord}" เป็น "${suggestion}" หรือไม่?`)) {
+                    replaceTextInTextarea(originalWord, suggestion);
+                    // Rerun spell check to update the view
+                    handleSpellCheck();
+                }
+            }
+        });
+
+        // --- Main Logic Functions ---
+        async function handleSpellCheck() {
+            hideAlert();
+            showSpinner('check', true);
+            resultContainer.classList.add('hidden');
+
+            try {
+                const formData = new FormData();
+                formData.append('text', textInput.value);
+
+                const response = await fetch('/check_spelling', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`เกิดข้อผิดพลาดจากเซิร์ฟเวอร์: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.error) {
+                    showAlert(data.error);
+                } else {
+                    displaySpellCheckResult(data);
+                }
+
+            } catch (err) {
+                console.error('Spell Check Error:', err);
+                showAlert(err.message || 'เกิดข้อผิดพลาดที่ไม่คาดคิด กรุณาตรวจสอบ Console');
+            } finally {
+                showSpinner('check', false);
+            }
+        }
+
+        function displaySpellCheckResult(data) {
+            const originalText = data.original_text;
+            let spellResult;
+            try {
+                spellResult = JSON.parse(data.result);
+            } catch (e) {
+                console.error("Failed to parse JSON from model:", data.result);
+                showAlert("ไม่สามารถประมวลผลการตอบกลับจาก AI ได้ กรุณาลองอีกครั้ง");
+                return;
+            }
+
+            const errors = spellResult.errors || [];
+            
+            if (errors.length > 0) {
+                errors.sort((a, b) => b.index - a.index);
+                
+                let highlightedText = originalText;
+                errors.forEach(err => {
+                    const startIndex = err.index;
+                    const endIndex = startIndex + err.word.length;
+                    // Add data-suggestion attribute to store the suggestion
+                    const replacement = `<span class="highlight-error" data-suggestion="${err.suggestion}">${err.word}</span>`;
+                    highlightedText = highlightedText.substring(0, startIndex) + replacement + highlightedText.substring(endIndex);
+                });
+                resultText.innerHTML = highlightedText;
+                errorCount.textContent = `พบคำที่อาจสะกดผิด ${errors.length} คำ (คลิกที่คำเพื่อแก้ไข)`;
+            } else {
+                resultText.textContent = originalText;
+                errorCount.textContent = "✅ ไม่พบคำที่สะกดผิด";
+            }
+            resultContainer.classList.remove('hidden');
+        }
+
+    </script>
+</body>
+</html>
