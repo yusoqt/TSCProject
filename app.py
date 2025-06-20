@@ -26,7 +26,7 @@ except AttributeError:
 
 # --- Gemini Model ---
 # We will use the gemini-1.5-flash model.
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = genai.GenerativeModel('gemini-2.0-flash')
 
 def clean_json_response(text):
     """
@@ -67,10 +67,13 @@ def check_spelling():
         2. "index" (the starting position of that word in the original text)
         3. "suggestion" (the suggested correction)
 
-        For example, if the input is 'ฉันไปกิข้าวที่ร้านอาหาร', the output should be:
+            
+        
         {{
             "errors": [
-                {{"word": "กิข้าว", "index": 6, "suggestion": "กินข้าว"}}
+                {{"word": "ฉัรรัก", "word_index": 0, "suggestion": "ฉันรัก"}},
+                {{"word": "ประเทษ", "word_index": 6, "suggestion": "ประเทศ"}},
+                {{"word": "ไท", "word_index": 12, "suggestion": "ไทย"}}
             ]
         }}
         
@@ -79,19 +82,21 @@ def check_spelling():
         Here is the text to check:
         "{text_to_check}"
         """
-
         # --- API Call ---
         response = model.generate_content(prompt)
+        #print(f"Response from Gemini API: {response.text}")
+        
         cleaned_response_text = clean_json_response(response.text)
+        #print(f"Cleaned response text: {cleaned_response_text}")
 
         # Validate that the response is valid JSON
         try:
             json.loads(cleaned_response_text)
         except json.JSONDecodeError:
-             # If parsing fails, ask the model to fix the JSON
-             fix_prompt = f"The following text is not valid JSON. Please fix it and provide only the valid JSON object: {cleaned_response_text}"
-             correction_response = model.generate_content(fix_prompt)
-             cleaned_response_text = clean_json_response(correction_response.text)
+            # If parsing fails, ask the model to fix the JSON
+            fix_prompt = f"The following text is not valid JSON. Please fix it and provide only the valid JSON object: {cleaned_response_text}"
+            correction_response = model.generate_content(fix_prompt)
+            cleaned_response_text = clean_json_response(correction_response.text)
 
         return jsonify({'original_text': text_to_check, 'result': cleaned_response_text})
 
